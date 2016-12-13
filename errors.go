@@ -19,17 +19,17 @@ type Error struct {
 }
 
 // AddInfo allows to prepend information to an error string.
-func (e *Error) AddInfo(key string, value interface{}) Error {
+func (e *Error) AddInfo(key string, value interface{}) *Error {
 	if e.ErrorInfo == nil {
 		e.ErrorInfo = make(map[string]interface{})
 	}
 	e.ErrorInfo[key] = value
-	return *e
+	return e
 }
 
 // Retrieve will extract an Error object from an error interface.
-func (e Error) Retrieve(E error) Error {
-	if val, ok := E.(Error); ok {
+func (e *Error) Retrieve(E error) *Error {
+	if val, ok := E.(*Error); ok {
 		return val
 	}
 	return e.codec.Decode(E.Error())
@@ -48,18 +48,18 @@ func (e Error) Error() string {
 // Constructor is a function that allows to create an Error creating function.
 // A set of functions that return information key/value pairs can be specified.
 // Any Error created will subsequently be decorated with information.
-func Constructor(codec Codec, infoHeaderFuncs ...func() (key string, value interface{})) func(string) Error {
-	return func(message string) Error {
+func Constructor(codec Codec, infoHeaderFuncs ...func() (key string, value interface{})) func(string) *Error {
+	return func(message string) *Error {
 		e := Error{nil, message, codec}
 		if len(infoHeaderFuncs) == 0 {
-			return e
+			return &e
 		}
 		e.ErrorInfo = make(map[string]interface{})
 		for _, f := range infoHeaderFuncs {
 			name, value := f()
 			e.ErrorInfo[name] = value
 		}
-		return e
+		return &e
 	}
 }
 
@@ -67,11 +67,11 @@ func Constructor(codec Codec, infoHeaderFuncs ...func() (key string, value inter
 // type Error.
 type Codec struct {
 	Encode func(interface{}) ([]byte, error)
-	Decode func(string) Error
+	Decode func(string) *Error
 }
 
 // NewCodec allows the specification of a new codec.
-func NewCodec(Enc func(interface{}) ([]byte, error), Dec func(string) Error) Codec {
+func NewCodec(Enc func(interface{}) ([]byte, error), Dec func(string) *Error) Codec {
 	return Codec{Enc, Dec}
 }
 
@@ -82,14 +82,14 @@ func toJSON(i interface{}) ([]byte, error) {
 }
 
 // fromJSON enables the decoding of an error string into an Error object.
-func fromJSON(s string) Error {
+func fromJSON(s string) *Error {
 	var e Error
 	err := json.Unmarshal(([]byte)(s), &e)
 	if err != nil {
 		e.ErrorCause = s
-		return e
+		return &e
 	}
-	return e
+	return &e
 }
 
 // JSONCodec is an Error Encoder/Decoder object.
@@ -97,7 +97,7 @@ var JSONCodec Codec
 
 // New is the default function that returns an Error object.
 // It is initialized in an init block.
-var New func(message string) Error
+var New func(message string) *Error
 
 func init() {
 	JSONCodec = NewCodec(toJSON, fromJSON)
