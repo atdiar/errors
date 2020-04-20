@@ -2,7 +2,7 @@
 
 [![GoDoc](https://godoc.org/github.com/atdiar/errors?status.svg)](https://godoc.org/github.com/atdiar/errors)
 
-errors - A drop-in replacement for the errors package
+errors - A replacement for the errors package
 -------------------------------------------------------------
 
 This package defines an `Error` type which, obviously, implements the `error` interface.

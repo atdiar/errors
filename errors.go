@@ -5,6 +5,7 @@ package errors
 import (
 	"encoding/json"
 	"runtime"
+	"strconv"
 	"time"
 )
 
@@ -14,8 +15,33 @@ import (
 // json-serialization.
 type Error struct {
 	ErrorInfo  map[string]interface{}
+	ErrCode    string `json:"-"`
 	ErrorCause string
 	codec      Codec
+}
+
+// Code sets an error code.
+func (e *Error) Code(c int) *Error {
+	e.ErrCode = strconv.Itoa(c)
+	e.AddInfo("Code", e.Code)
+	return e
+}
+
+// As tests whether the object implementing the error interface is of type Error.
+func As(e error) *Error {
+	err, ok := e.(*Error)
+	if !ok {
+		return nil
+	}
+	return err
+}
+
+// Is compares errors by the
+func (e *Error) Is(code int) bool {
+	if e == nil {
+		return false
+	}
+	return e.ErrCode == strconv.Itoa(code)
 }
 
 // AddInfo allows to prepend information to an error string.
@@ -50,7 +76,7 @@ func (e Error) Error() string {
 // Any Error created will subsequently be decorated with information.
 func Constructor(codec Codec, infoHeaderFuncs ...func() (key string, value interface{})) func(string) *Error {
 	return func(message string) *Error {
-		e := Error{nil, message, codec}
+		e := Error{nil, "", message, codec}
 		if len(infoHeaderFuncs) == 0 {
 			return &e
 		}
@@ -92,21 +118,22 @@ func fromJSON(s string) *Error {
 	return &e
 }
 
-// JSONCodec is an Error Encoder/Decoder object.
+/* JSONCodec is an Error Encoder/Decoder object.
 var JSONCodec Codec
 
 // New is the default function that returns an Error object.
 // It is initialized in an init block.
 var New func(message string) *Error
 
-func init() {
+// Defaults */
+var (
 	JSONCodec = NewCodec(toJSON, fromJSON)
-	New = Constructor(JSONCodec)
-}
+	New       = Constructor(JSONCodec)
+)
 
-// PrintDate returns the Unix formatted Date at which an error occured.
+// PrintDate returns the Unix formatted Date (UTC) at which an error occured.
 func PrintDate() (fieldName, date interface{}) {
-	return "date", time.Now().Format(time.UnixDate)
+	return "date", time.Now().UTC().Format(time.UnixDate)
 }
 
 // PrintLine returns the line number on which the error occured.
