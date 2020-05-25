@@ -22,6 +22,7 @@ func Example() {
 	//{
 	//  "ErrorInfo": {
 	//   "date": "Tue Nov 10 23:00:00 UTC 2009",
+	//   "file": "/home/atd/go/src/github.com/atdiar/errors/errors.go",
 	//   "fn": "github.com/atdiar/errors_test.Example",
 	//   "line": 13
 	//  },

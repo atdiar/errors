@@ -14,16 +14,17 @@ import (
 // Calling its Error() method returns a string that corresponds to its
 // json-serialization.
 type Error struct {
-	ErrorInfo  map[string]interface{}
-	ErrCode    string `json:"-"`
+	ErrorInfo  map[string]interface{} `json:",omitempty"`
+	ErrorCode  string                 `json:"-"`
 	ErrorCause string
+	Underlying *Error `json:"ErrorSource,omitempty"`
 	codec      Codec
 }
 
 // Code sets an error code.
 func (e *Error) Code(c int) *Error {
-	e.ErrCode = strconv.Itoa(c)
-	e.AddInfo("Code", e.Code)
+	e.ErrorCode = strconv.Itoa(c)
+	e.AddInfo("Code", c)
 	return e
 }
 
@@ -41,7 +42,7 @@ func (e *Error) Is(code int) bool {
 	if e == nil {
 		return false
 	}
-	return e.ErrCode == strconv.Itoa(code)
+	return e.ErrorCode == strconv.Itoa(code)
 }
 
 // AddInfo allows to prepend information to an error string.
@@ -55,18 +56,31 @@ func (e *Error) AddInfo(key string, value interface{}) *Error {
 
 // Retrieve will extract an Error object from an error interface.
 func (e *Error) Retrieve(E error) *Error {
+	if E == nil {
+		return nil
+	}
 	if val, ok := E.(*Error); ok {
 		return val
 	}
-	return e.codec.Decode(E.Error())
+	return e.codec.Decode([]byte(E.Error()))
+}
+
+func (e *Error) Wraps(E error) *Error {
+	ne := *e
+	err := ne.Retrieve(E)
+	if e == err {
+		return e
+	}
+	e.Underlying = err
+	return e
 }
 
 // Error is the method allowing the Error type to implement the standard error
 // interface.
-func (e Error) Error() string {
+func (e *Error) Error() string {
 	res, err := e.codec.Encode(e)
 	if err != nil {
-		return "An error occured but formatting failed."
+		return err.Error()
 	}
 	return string(res)
 }
@@ -76,7 +90,7 @@ func (e Error) Error() string {
 // Any Error created will subsequently be decorated with information.
 func Constructor(codec Codec, infoHeaderFuncs ...func() (key string, value interface{})) func(string) *Error {
 	return func(message string) *Error {
-		e := Error{nil, "", message, codec}
+		e := Error{nil, "", message, nil, codec}
 		if len(infoHeaderFuncs) == 0 {
 			return &e
 		}
@@ -93,11 +107,11 @@ func Constructor(codec Codec, infoHeaderFuncs ...func() (key string, value inter
 // type Error.
 type Codec struct {
 	Encode func(interface{}) ([]byte, error)
-	Decode func(string) *Error
+	Decode func([]byte) *Error
 }
 
 // NewCodec allows the specification of a new codec.
-func NewCodec(Enc func(interface{}) ([]byte, error), Dec func(string) *Error) Codec {
+func NewCodec(Enc func(interface{}) ([]byte, error), Dec func([]byte) *Error) Codec {
 	return Codec{Enc, Dec}
 }
 
@@ -108,11 +122,11 @@ func toJSON(i interface{}) ([]byte, error) {
 }
 
 // fromJSON enables the decoding of an error string into an Error object.
-func fromJSON(s string) *Error {
+func fromJSON(b []byte) *Error {
 	var e Error
-	err := json.Unmarshal(([]byte)(s), &e)
+	err := json.Unmarshal(b, &e)
 	if err != nil {
-		e.ErrorCause = s
+		e.ErrorCause = string(b)
 		return &e
 	}
 	return &e
@@ -128,7 +142,7 @@ var New func(message string) *Error
 // Defaults */
 var (
 	JSONCodec = NewCodec(toJSON, fromJSON)
-	New       = Constructor(JSONCodec)
+	New       = Constructor(JSONCodec, PrintFile, PrintFunc, PrintLine)
 )
 
 // PrintDate returns the Unix formatted Date (UTC) at which an error occured.
