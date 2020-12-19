@@ -4,9 +4,16 @@ package errors
 
 import (
 	"encoding/json"
+	"fmt"
 	"runtime"
 	"strconv"
 	"time"
+
+	"github.com/atdiar/flag"
+)
+
+var (
+	DEBUG = flag.NewCC()
 )
 
 // Error is a type implementing the error interface that can be customized with
@@ -78,11 +85,30 @@ func (e *Error) Wraps(E error) *Error {
 // Error is the method allowing the Error type to implement the standard error
 // interface.
 func (e *Error) Error() string {
+	var strErr string
 	res, err := e.codec.Encode(e)
 	if err != nil {
-		return err.Error()
+		strErr = err.Error()
+		if DEBUG.IsTrue() {
+			// create stacktrace and append it
+			buf := make([]byte, 1024)
+			runtime.Stack(buf, true)
+			strErr = strErr + "\n\n" + fmt.Sprint(string(buf))
+		}
+		return strErr
 	}
-	return string(res)
+	strErr = string(res)
+	if DEBUG.IsTrue() {
+		// create stacktrace and append it
+		buf := make([]byte, 1024)
+		runtime.Stack(buf, true)
+		strErr = strErr + "\n\nTRACE===========================================\n" + fmt.Sprint(string(buf)) + "\n\n"
+	}
+	return strErr
+}
+
+func (e *Error) String() string {
+	return e.ErrorCause
 }
 
 // Constructor is a function that allows to create an Error creating function.
@@ -146,7 +172,7 @@ var (
 )
 
 // PrintDate returns the Unix formatted Date (UTC) at which an error occured.
-func PrintDate() (fieldName, date interface{}) {
+func PrintDate() (fieldName string, date interface{}) {
 	return "date", time.Now().UTC().Format(time.UnixDate)
 }
 
@@ -168,6 +194,64 @@ func PrintFunc() (fieldname string, fn interface{}) {
 	f := runtime.FuncForPC(pc)
 	fn = f.Name()
 	return "fn", fn
+}
+
+// PrintTrace returns the name of the function in which the error occured.
+func PrintTrace() (fieldname string, funcs interface{}) {
+	/*pc := make([]uintptr, 20)
+
+	result := make(map[string]struct {
+		File string `json:"file"`
+		Line int    `json:"line"`
+	}, runtime.Callers(0, pc))
+
+	for _, counter := range pc {
+		f := runtime.FuncForPC(counter)
+		if f != nil {
+			file, line := f.FileLine(0)
+			result[f.Name()] = struct {
+				File string `json:"file"`
+				Line int    `json:"line"`
+			}{file, line}
+		}
+	}
+	return "trace", result
+	*/
+	buf := make([]byte, 1024)
+	runtime.Stack(buf, true)
+	return "trace", fmt.Sprint(string(buf))
+}
+
+// List  defines a datatype holding a list of error values.
+type List struct {
+	Values []error
+}
+
+// NewList returns a new, emptyn container for a list of errors.
+func NewList() *List {
+	l := new(List)
+	l.Values = make([]error, 0)
+	return l
+}
+
+// Add allows to append an error value to an error list.
+func (l *List) Add(e ...error) {
+	if l.Values == nil {
+		l.Values = make([]error, 0)
+	}
+	l.Values = append(l.Values, e...)
+}
+
+func (l *List) Error() string {
+	var s string
+	for _, v := range l.Values {
+		s = s + v.Error() + "\n"
+	}
+	return s
+}
+
+func (l *List) Nil() bool {
+	return len(l.Values) == 0
 }
 
 // NOTE While this package defines an error type, the header is entirely customizable.
